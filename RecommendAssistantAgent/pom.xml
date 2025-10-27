@@ -27,7 +27,7 @@
     </parent>
 
     <artifactId>RecommendAssistantAgent</artifactId>
-    <name>rag-example</name>
+    <name>RecommendAssistantAgent</name>
     <description>RAG Demo project for Spring AI Alibaba</description>
 
     <properties>

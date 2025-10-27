@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.a2a.client.component.analyzer.IntentAnalyzer;
 import com.google.a2a.client.service.LLMService;
 import com.google.a2a.client.service.impl.SpringAILLMService;
+import com.google.a2a.client.service.impl.StreamingRouterServiceImpl;
 import com.google.a2a.client.manager.AgentManager;
 import com.google.a2a.client.component.orchestrator.AgentOrchestrator;
 import com.google.a2a.client.service.impl.RouterServiceImpl;
@@ -13,6 +14,7 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.reactive.function.client.WebClient;
 
 import java.io.IOException;
 
@@ -90,6 +92,36 @@ public class RouterAgentConfig {
     @Bean
     public ObjectMapper objectMapper() {
         return new ObjectMapper();
+    }
+    
+    /**
+     * WebClient Builder Bean (for reactive streaming)
+     */
+    @Bean
+    public WebClient.Builder webClientBuilder() {
+        logger.info("Initializing WebClient Builder for streaming");
+        return WebClient.builder();
+    }
+    
+    /**
+     * Aggregator Agent Bean
+     */
+    @Bean
+    public com.google.a2a.client.aggregator.AggregatorAgent aggregatorAgent(LLMService llmService) {
+        logger.info("Initializing AggregatorAgent");
+        return new com.google.a2a.client.aggregator.AggregatorAgent(llmService);
+    }
+    
+    /**
+     * Streaming Router Service Bean
+     */
+    @Bean
+    public com.google.a2a.client.service.impl.StreamingRouterServiceImpl streamingRouterService(
+            IntentAnalyzer intentAnalyzer,
+            WebClient.Builder webClientBuilder,
+            com.google.a2a.client.aggregator.AggregatorAgent aggregatorAgent) {
+        logger.info("Initializing StreamingRouterService");
+        return new StreamingRouterServiceImpl(intentAnalyzer, webClientBuilder, aggregatorAgent);
     }
 }
 

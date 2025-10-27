@@ -56,3 +56,7 @@ application-dev.yml
 .nyc_output/
 coverage/
 
+# 文档文件夹
+docs/
+**/docs/
+**/docs/**

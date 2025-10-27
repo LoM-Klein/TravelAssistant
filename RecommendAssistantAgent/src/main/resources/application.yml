@@ -1,0 +1,60 @@
+spring:
+  application:
+    name: prompt-example
+
+  ai:
+    dashscope:
+      api-key: sk-20a19e950b1f46eb968047ec8d3d171a
+      # workspace-id: ${AI_DASHSCOPE_WORKSPACE_ID}
+      
+      # Chat模型配置
+      chat:
+        options:
+          model: qwen-flash
+          temperature: 0.7
+      
+      # Embedding模型配置
+      embedding:
+        options:
+          model: text-embedding-v2
+          # 可选模型：
+          # - text-embedding-v1
+          # - text-embedding-v2 (推荐，性能更好)
+          # - text-embedding-v3
+
+    vectorstore:
+      elasticsearch:
+        index-name: strategy_document
+        similarity: cosine
+        dimensions: 1536  # text-embedding-v2 的维度
+        initialize-schema: true  # 自动创建索引
+
+  elasticsearch:
+    uris: http://127.0.0.1:9200
+    username: elastic
+    password: dCuqwL-DdnRFiBXjRQ0_
+
+# 应用自定义配置
+app:
+  # 数据源配置
+  data:
+    # 支持单个或多个文件，用逗号分隔
+    # 示例：classpath:data/file1.txt,classpath:data/file2.txt
+    source: classpath:data/travel_guide_test_data.txt
+    # 数据文件类型 (txt, pdf)
+    type: txt
+  
+  # 数据摄取配置
+  ingest:
+    # 批处理大小（不能超过 25，这是 DashScope Embedding API 的限制）
+    batch-size: 20
+    # 最大重试次数
+    max-retries: 3
+    # 是否启用自动摄取（应用启动时）
+    auto-ingest: false
+
+# 服务器配置
+server:
+  port: 9100
+  servlet:
+    context-path: /

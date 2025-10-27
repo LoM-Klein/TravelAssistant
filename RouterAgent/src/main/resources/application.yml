@@ -1,0 +1,34 @@
+# Router Agent Application Configuration
+
+server:
+  port: 9000
+
+spring:
+  application:
+    name: router-agent
+
+  # Spring AI 配置
+  ai:
+    dashscope:
+      api-key: sk-20a19e950b1f46eb968047ec8d3d171a
+      # workspace-id: ${AI_DASHSCOPE_WORKSPACE_ID}
+      
+      # Chat模型配置
+      chat:
+        options:
+          model: qwen-flash
+          temperature: 0.7
+
+# Router Agent 配置
+router:
+  agents:
+    config: agents-config.yaml  # Agent 配置文件路径
+
+# 日志配置
+logging:
+  level:
+    com.google.a2a.client: DEBUG
+    root: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+

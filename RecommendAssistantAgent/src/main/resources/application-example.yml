@@ -1,0 +1,108 @@
+# 应用配置示例
+# 复制此文件为 application.yml 并修改相应配置
+
+spring:
+  application:
+    name: recommend-assistant
+
+  ai:
+    dashscope:
+      # 阿里云 DashScope API Key（必需）
+      # 获取方式：https://dashscope.console.aliyun.com/
+      api-key: ${AI_DASHSCOPE_API_KEY:sk-20a19e950b1f46eb968047ec8d3d171a}
+      # workspace-id: ${AI_DASHSCOPE_WORKSPACE_ID}
+      
+      # Chat模型配置
+      chat:
+        options:
+          # 对话模型选择
+          # 可选：qwen-turbo, qwen-plus, qwen-max, qwen-max-longcontext
+          model: qwen-plus
+          # 温度参数：控制回答的随机性 (0.0-2.0)
+          # 较低值：更确定、一致的回答
+          # 较高值：更有创意、多样的回答
+          temperature: 0.7
+      
+      # Embedding模型配置
+      embedding:
+        options:
+          # 向量化模型选择
+          # 可选模型：
+          # - text-embedding-v1: 1024维，基础版本
+          # - text-embedding-v2: 1536维，性能更好（推荐）
+          # - text-embedding-v3: 1024维，最新版本
+          model: text-embedding-v2
+
+    vectorstore:
+      elasticsearch:
+        # 向量索引名称
+        index-name: strategy_document
+        # 相似度计算方法：cosine, dot_product, l2_norm
+        similarity: cosine
+        # 向量维度（必须与embedding模型对应）
+        # text-embedding-v1: 1024
+        # text-embedding-v2: 1536
+        # text-embedding-v3: 1024
+        dimensions: 1536
+
+  elasticsearch:
+    uris: http://127.0.0.1:9200
+    username: elastic
+    password: dCuqwL-DdnRFiBXjRQ0_
+
+# 应用自定义配置
+app:
+  # 数据源配置
+  data:
+    # 数据文件路径
+    # 支持以下格式：
+    # - 单个文件：classpath:data/file.txt
+    # - 多个文件：classpath:data/file1.txt,classpath:data/file2.txt
+    # - 文件系统：file:/absolute/path/to/file.txt
+    source: classpath:data/travel_guide_test_data.txt
+    
+    # 文件类型：txt, pdf
+    type: txt
+  
+  # 数据摄取配置
+  ingest:
+    # 批处理大小
+    # 建议值：
+    # - 小数据集（< 100文档）：20
+    # - 中等数据集（100-1000文档）：50
+    # - 大数据集（> 1000文档）：100
+    batch-size: 50
+    
+    # 最大重试次数
+    # 单个批次失败时的重试次数
+    max-retries: 3
+    
+    # 是否在应用启动时自动摄取数据
+    # true: 启动时自动导入
+    # false: 需要手动调用API导入
+    auto-ingest: false
+
+# 日志配置
+logging:
+  level:
+    # 根日志级别
+    root: INFO
+    # Spring框架日志
+    org.springframework: INFO
+    # 应用日志
+    com.ai.recommend: DEBUG
+    # Elasticsearch客户端日志
+    org.elasticsearch: WARN
+  
+  pattern:
+    # 控制台日志格式
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+# 服务器配置
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+
+

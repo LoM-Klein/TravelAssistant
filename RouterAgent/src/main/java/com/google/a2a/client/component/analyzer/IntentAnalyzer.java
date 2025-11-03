@@ -51,8 +51,8 @@ public class IntentAnalyzer {
         String agentDescriptions = buildAgentDescriptions(availableAgents);
         
         // 3. 使用大模型分析意图
-        String analysisPrompt = buildAnalysisPrompt(userQuery, agentDescriptions);
-        String llmResponse = llmService.analyze(analysisPrompt);
+
+        String llmResponse = llmService.analyze(userQuery, agentDescriptions);
         
         // 4. 解析大模型响应
         return parseLLMResponse(llmResponse, userQuery, availableAgents);
@@ -66,6 +66,7 @@ public class IntentAnalyzer {
         StringBuilder descriptions = new StringBuilder();
         
         int index = 1;
+        
         for (AgentManager.AgentInfo agent : agents) {
             // 过滤不可用的 Agent
             if (!agent.healthy() || agent.config() == null || !agent.config().enabled()) {
@@ -74,12 +75,18 @@ public class IntentAnalyzer {
             
             AgentCard card = agent.card();
             
+            // 警告：AgentCard 缺失
+            if (card == null) {
+                logger.warn("Agent {} has no AgentCard, falling back to config only. " +
+                        "This may result in less accurate intent analysis.", agent.name());
+            }
+            
             descriptions.append(String.format("%d. **%s**\n", index++, agent.name()));
             
             // 描述信息（优先使用 AgentCard 中的描述）
             String description = card != null && card.description() != null 
                     ? card.description() 
-                    : agent.config().description();
+                    : (agent.config().description() != null ? agent.config().description() : "No description available");
             descriptions.append(String.format("   - 描述: %s\n", description));
             
             // Skills 信息（优先使用 AgentCard 中的详细技能信息）
@@ -113,47 +120,7 @@ public class IntentAnalyzer {
         return descriptions.toString();
     }
     
-    /**
-     * 构建分析提示词
-     * 参考 TravelIntentAnalyzer 的提示词设计，但更加通用
-     */
-    private String buildAnalysisPrompt(String userQuery, String agentDescriptions) {
-        return String.format("""
-            你是一个智能的 Agent 路由器，负责分析用户的查询意图并选择最合适的 Agent 来处理。
-            
-            用户查询: "%s"
-            
-            可用的 Agent 列表:
-            %s
-            
-            请按照以下步骤进行分析:
-            1. 识别用户的意图和需求
-            2. 判断需要哪些 Agent 来处理这个查询（可以是一个或多个）
-            3. 如果需要多个 Agent，请为每个 Agent 拆分出专门的子查询
-            4. 说明为什么选择这些 Agent
-            5. 评估你的分析置信度
-            
-            **重要规则**:
-            - 如果查询涉及多个领域/技能，选择多个相关的 Agent
-            - 为每个 Agent 生成针对性的查询，而不是简单地复制原始查询
-            - 优先选择技能最匹配的 Agent
-            - 如果不确定，选择通用能力强的 Agent
-            
-            请严格按照以下 JSON 格式返回（只返回 JSON，不要有其他内容）:
-            {
-              "intents": ["意图1", "意图2"],
-              "selectedAgents": ["agentName1", "agentName2"],
-              "splitQueries": {
-                "agentName1": "针对 agent1 的专门查询",
-                "agentName2": "针对 agent2 的专门查询"
-              },
-              "reasoning": "选择这些 Agent 的原因",
-              "confidence": 0.95
-            }
-            
-            JSON 响应:
-            """, userQuery, agentDescriptions);
-    }
+
     
     /**
      * 解析大模型响应

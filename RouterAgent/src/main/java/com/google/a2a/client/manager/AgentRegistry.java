@@ -13,6 +13,9 @@ import java.util.stream.Collectors;
  * Agent 注册表
  * <p>
  * 维护所有已注册的 Agent 及其客户端连接
+ * 
+ * 注意：不使用 @Component 注解，由 AgentManager 创建并管理
+ * 避免 Spring 自动创建导致多实例问题
  */
 public class AgentRegistry {
     
@@ -82,15 +85,27 @@ public class AgentRegistry {
      * 获取 Agent Card
      */
     public Optional<AgentCard> getAgentCard(String agentName) {
-        return Optional.ofNullable(agentCards.get(agentName));
+        AgentCard card = agentCards.get(agentName);
+        if (card == null) {
+            logger.warn("AgentCard not found for agent: {}. Available agents: {}", 
+                    agentName, agentCards.keySet());
+        }
+        return Optional.ofNullable(card);
     }
     
     /**
      * 缓存 Agent Card
      */
     public void cacheAgentCard(String agentName, AgentCard card) {
+        if (card == null) {
+            logger.warn("Attempted to cache null AgentCard for agent: {}", agentName);
+            return;
+        }
         agentCards.put(agentName, card);
-        logger.debug("Cached agent card for: {}", agentName);
+        logger.info("Cached agent card for: {} - Name: {}, Skills: {}", 
+                agentName, 
+                card.name(), 
+                card.skills() != null ? card.skills().size() : 0);
     }
     
     /**

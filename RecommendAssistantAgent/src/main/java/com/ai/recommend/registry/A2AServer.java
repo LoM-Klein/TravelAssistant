@@ -2,8 +2,8 @@ package com.ai.recommend.registry;
 
 import com.ai.recommend.Service.TaskHandler;
 import com.travelassistant.common.model.*;
-import com.google.a2a.model.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.Getter;
 
 import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
@@ -17,6 +17,11 @@ import java.util.UUID;
  */
 public class A2AServer {
 
+    /**
+     * -- GETTER --
+     *  Get agent card information
+     */
+    @Getter
     private final AgentCard agentCard;
     private final TaskHandler handler;
     private final Map<String, Task> taskStore;
@@ -160,13 +165,6 @@ public class A2AServer {
     }
 
     /**
-     * Get agent card information
-     */
-    public AgentCard getAgentCard() {
-        return agentCard;
-    }
-
-    /**
      * Get task history
      */
     public List<Message> getTaskHistory(String taskId) {
@@ -176,7 +174,7 @@ public class A2AServer {
     /**
      * Parse request parameters
      */
-    private <T> T parseParams(Object params, Class<T> clazz) throws Exception {
+    private <T> T parseParams(Object params, Class<T> clazz) {
         return objectMapper.convertValue(params, clazz);
     }
 

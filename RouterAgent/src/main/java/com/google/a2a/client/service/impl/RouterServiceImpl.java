@@ -200,14 +200,14 @@ public class RouterServiceImpl implements RouterService {
             return successfulResults.get(0).responseText();
         }
         
-        // 使用大模型聚合多个响应
-        Map<String, String> agentResponses = successfulResults.stream()
-                .collect(Collectors.toMap(
-                        AgentExecutionResult::agentName,
-                        AgentExecutionResult::responseText
-                ));
+        // 使用大模型聚合多个响应（转换为流式并阻塞获取结果）
+        String combinedAgentOutput = successfulResults.stream()
+                .map(result -> String.format("### %s:\n%s", result.agentName(), result.responseText()))
+                .collect(Collectors.joining("\n\n"));
         
-        return llmService.aggregate(userQuery, agentResponses);
+        return llmService.aggregateStreaming(userQuery, combinedAgentOutput)
+                .collect(Collectors.joining())  // 收集所有流式 token
+                .block();  // 阻塞等待完成
     }
 }
 

@@ -31,14 +31,23 @@ public class AgentManager {
     private final AgentRegistry registry;
     private final AgentDiscovery discovery;
     private final AgentHealthMonitor healthMonitor;
+
     
     /**
-     * 构造函数
+     * 构造函数 - 创建内部的 AgentRegistry
      */
     public AgentManager() {
         this.registry = new AgentRegistry();
         this.discovery = new AgentDiscovery(registry);
         this.healthMonitor = new AgentHealthMonitor(registry, discovery);
+    }
+    
+    /**
+     * 获取内部的 AgentRegistry 实例
+     * 重要：必须使用这个方法获取 registry，确保使用的是同一个实例
+     */
+    public AgentRegistry getRegistry() {
+        return registry;
     }
     
     /**
@@ -152,6 +161,10 @@ public class AgentManager {
                     var config = registry.getConfig(name).orElse(null);
                     var card = registry.getAgentCard(name).orElse(null);
                     boolean healthy = registry.isHealthy(name);
+                    
+                    if (card == null) {
+                        logger.warn("Agent {} has no AgentCard cached. This may affect intent analysis.", name);
+                    }
                     
                     return new AgentInfo(name, config, card, healthy);
                 })

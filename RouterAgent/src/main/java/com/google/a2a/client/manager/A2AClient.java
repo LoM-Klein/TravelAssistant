@@ -5,6 +5,10 @@ import com.google.a2a.client.listener.StreamingEventListener;
 import com.travelassistant.common.model.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Flux;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
@@ -20,8 +24,11 @@ import java.util.concurrent.CompletableFuture;
  */
 public class A2AClient {
     
+    private static final Logger logger = LoggerFactory.getLogger(A2AClient.class);
+    
     private final String baseUrl;
     private final HttpClient httpClient;
+    private final WebClient webClient;
     private final ObjectMapper objectMapper;
     
     /**
@@ -33,6 +40,9 @@ public class A2AClient {
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         this.httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(30))
+            .build();
+        this.webClient = WebClient.builder()
+            .baseUrl(this.baseUrl)
             .build();
         this.objectMapper = new ObjectMapper();
     }
@@ -46,6 +56,24 @@ public class A2AClient {
     public A2AClient(String baseUrl, HttpClient httpClient) {
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         this.httpClient = httpClient;
+        this.webClient = WebClient.builder()
+            .baseUrl(this.baseUrl)
+            .build();
+        this.objectMapper = new ObjectMapper();
+    }
+    
+    /**
+     * Create a new A2A client with custom WebClient
+     * 
+     * @param baseUrl the base URL of the A2A server
+     * @param webClient custom WebClient for reactive streaming
+     */
+    public A2AClient(String baseUrl, WebClient webClient) {
+        this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+        this.httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(30))
+            .build();
+        this.webClient = webClient;
         this.objectMapper = new ObjectMapper();
     }
     
@@ -106,6 +134,8 @@ public class A2AClient {
     /**
      * Send a task with streaming response
      * 
+     * 使用 WebClient 处理 SSE 流式响应，支持实时数据流
+     * 
      * @param params task send parameters
      * @param listener event listener for streaming updates
      * @return CompletableFuture that completes when streaming ends
@@ -120,56 +150,107 @@ public class A2AClient {
                     params
                 );
                 
-                String requestBody = objectMapper.writeValueAsString(request);
+                // 使用 WebClient 接收 SSE 流式响应
+                Flux<String> responseFlux = webClient.post()
+                    .uri("/a2a/stream")
+                    .bodyValue(request)
+                    .retrieve()
+                    .bodyToFlux(String.class);  // 自动解析 SSE 格式
                 
-                HttpRequest httpRequest = HttpRequest.newBuilder()
-                    .uri(URI.create(baseUrl + "/a2a/stream"))
-                    .header("Content-Type", "application/json")
-                    .header("Accept", "text/event-stream")
-                    .POST(HttpRequest.BodyPublishers.ofString(requestBody))
-                    .build();
-                
-                HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
-                
-                if (response.statusCode() != 200) {
-                    listener.onError(new A2AClientException("HTTP " + response.statusCode() + ": " + response.body()));
-                    return;
-                }
-                
-                // Parse streaming response
-                String[] lines = response.body().split("\n");
-                for (String line : lines) {
-                    if (line.trim().isEmpty()) continue;
-                    
-                    try {
-                        SendTaskStreamingResponse streamingResponse = objectMapper.readValue(line, SendTaskStreamingResponse.class);
+                // 订阅流并处理事件
+                responseFlux
+                    .doOnNext(line -> {
+                        logger.debug("Received SSE line: [{}]", line);
                         
-                        if (streamingResponse.error() != null) {
-                            A2AError error = streamingResponse.error();
-                            Integer errorCode = error.code() != null ? error.code().getValue() : null;
-                            listener.onError(new A2AClientException(
-                                error.message(),
-                                errorCode
-                            ));
+                        // SSE 格式: "data: {json}\n\n" 或直接是 JSON 字符串
+                        String jsonData = extractJsonFromSseLine(line);
+                        if (jsonData == null || jsonData.isEmpty()) {
+                            logger.debug("Skipping empty or non-JSON SSE line");
                             return;
                         }
                         
-                        if (streamingResponse.result() != null) {
-                            listener.onEvent(streamingResponse.result());
-                        }
+                        logger.debug("Extracted JSON from SSE: {}", jsonData);
                         
-                    } catch (Exception e) {
-                        listener.onError(new A2AClientException("Failed to parse streaming response", e));
-                        return;
-                    }
-                }
-                
-                listener.onComplete();
+                        try {
+                            SendTaskStreamingResponse streamingResponse = objectMapper.readValue(
+                                jsonData, 
+                                SendTaskStreamingResponse.class
+                            );
+                            
+                            if (streamingResponse.error() != null) {
+                                A2AError error = streamingResponse.error();
+                                Integer errorCode = error.code() != null ? error.code().getValue() : null;
+                                logger.error("A2A streaming error: {} (code: {})", error.message(), errorCode);
+                                listener.onError(new A2AClientException(
+                                    error.message(),
+                                    errorCode
+                                ));
+                                return;
+                            }
+                            
+                            if (streamingResponse.result() != null) {
+                                logger.debug("Received A2A event: {}", 
+                                    streamingResponse.result().getClass().getSimpleName());
+                                listener.onEvent(streamingResponse.result());
+                            } else {
+                                logger.debug("Received A2A response with null result");
+                            }
+                            
+                        } catch (Exception e) {
+                            logger.error("Failed to parse streaming response: {}", jsonData, e);
+                            listener.onError(new A2AClientException(
+                                "Failed to parse streaming response: " + e.getMessage(), 
+                                e
+                            ));
+                        }
+                    })
+                    .doOnComplete(() -> {
+                        logger.debug("SSE stream completed");
+                        listener.onComplete();
+                    })
+                    .doOnError(error -> {
+                        logger.error("SSE stream error", error);
+                        listener.onError(
+                            new A2AClientException("Streaming request failed", error)
+                        );
+                    })
+                    .blockLast();  // 阻塞直到流完成
                 
             } catch (Exception e) {
                 listener.onError(new A2AClientException("Streaming request failed", e));
             }
         });
+    }
+    
+    /**
+     * 从 SSE 行中提取 JSON 数据
+     * SSE 格式: "data: {json}\n\n" 或直接是 JSON 字符串
+     * 
+     * WebClient 的 bodyToFlux(String.class) 会保留 SSE 格式，每行可能是：
+     * - "data: {json}" - 标准 SSE 格式
+     * - "" - 空行（分隔符）
+     * - "{json}" - 纯 JSON（如果已经处理过前缀）
+     */
+    private String extractJsonFromSseLine(String line) {
+        if (line == null || line.trim().isEmpty()) {
+            return null;
+        }
+
+        // 处理 SSE 格式: "data: {json}"
+        if (line.startsWith("data:")) {
+            String json = line.substring(5).trim();
+            // 跳过只有 "data:" 没有内容的情况
+            return json.isEmpty() ? null : json;
+        }
+
+        // 处理已经是 JSON 的情况（Spring 可能已经处理了前缀）
+        String trimmed = line.trim();
+        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+            return trimmed;
+        }
+
+        // 其他情况，可能是注释或其他 SSE 字段，忽略
+        return null;
     }
     
     /**

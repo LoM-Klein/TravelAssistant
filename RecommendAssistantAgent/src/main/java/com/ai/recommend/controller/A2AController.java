@@ -11,9 +11,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Schedulers;
 
-import java.io.IOException;
 import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 
@@ -107,97 +107,134 @@ public class A2AController {
      * 处理流式任务请求（Server-Sent Events）
      * 
      * 端点: POST /a2a/stream
-     * 使用 SSE 实现实时任务状态更新
+     * 使用响应式 Flux 实现实时任务状态更新
      */
     @PostMapping(
         value = "/a2a/stream",
         consumes = MediaType.APPLICATION_JSON_VALUE,
         produces = MediaType.TEXT_EVENT_STREAM_VALUE
     )
-    public SseEmitter handleStreamingTask(@RequestBody JSONRPCRequest request) {
+    public Flux<String> handleStreamingTask(@RequestBody JSONRPCRequest request) {
         logger.info("收到流式请求: method={}, id={}", request.method(), request.id());
         
-        SseEmitter emitter = new SseEmitter(Long.MAX_VALUE);
-
-        // 异步处理任务
-        CompletableFuture.runAsync(() -> {
-            try {
-                // 验证方法
-                if (!"message/send".equals(request.method())) {
-                    sendErrorEvent(emitter, request.id(), ErrorCode.METHOD_NOT_FOUND, 
-                        "Only message/send is supported for streaming");
-                    return;
+        // 验证方法
+        if (!"message/send".equals(request.method())) {
+            return Flux.error(new IllegalArgumentException(
+                "Only message/send is supported for streaming"));
+        }
+        
+        try {
+            // 解析参数
+            TaskSendParams params = parseTaskSendParams(request.params());
+            
+            // 创建响应式流
+            return Flux.<String>create(sink -> {
+                try {
+                    // 发送初始状态
+                    TaskStatus initialStatus = new TaskStatus(
+                        TaskState.WORKING,
+                        null,
+                        Instant.now().toString()
+                    );
+                    
+                    TaskStatusUpdateEvent initialEvent = new TaskStatusUpdateEvent(
+                        params.id(),
+                        initialStatus,
+                        false,
+                        null
+                    );
+                    
+                    SendTaskStreamingResponse initialResponse = new SendTaskStreamingResponse(
+                        request.id(),
+                        "2.0",
+                        initialEvent,
+                        null
+                    );
+                    
+                    logger.info("发送初始状态事件");
+                    sink.next(objectMapper.writeValueAsString(initialResponse));
+                    
+                    // 异步处理任务
+                    CompletableFuture.runAsync(() -> {
+                        try {
+                            // 处理任务
+                            JSONRPCResponse taskResponse = server.handleTaskSend(request);
+                            
+                            if (taskResponse.error() != null) {
+                                A2AError error = new A2AError(
+                                    ErrorCode.INTERNAL_ERROR,
+                                    taskResponse.error().message(),
+                                    null
+                                );
+                                SendTaskStreamingResponse errorResponse = new SendTaskStreamingResponse(
+                                    request.id(),
+                                    "2.0",
+                                    null,
+                                    error
+                                );
+                                sink.next(objectMapper.writeValueAsString(errorResponse));
+                                sink.complete();
+                                return;
+                            }
+                            
+                            // 发送最终状态
+                            Task completedTask = (Task) taskResponse.result();
+                            TaskStatusUpdateEvent finalEvent = new TaskStatusUpdateEvent(
+                                completedTask.id(),
+                                completedTask.status(),
+                                true,
+                                null
+                            );
+                            
+                            SendTaskStreamingResponse finalResponse = new SendTaskStreamingResponse(
+                                request.id(),
+                                "2.0",
+                                finalEvent,
+                                null
+                            );
+                            
+                            logger.info("发送最终状态事件");
+                            sink.next(objectMapper.writeValueAsString(finalResponse));
+                            sink.complete();
+                            logger.info("流式任务完成");
+                            
+                        } catch (Exception e) {
+                            logger.error("流式任务处理失败", e);
+                            sink.error(e);
+                        }
+                    });
+                    
+                } catch (Exception e) {
+                    logger.error("创建流式响应失败", e);
+                    sink.error(e);
                 }
-
-                // 解析参数
-                TaskSendParams params = parseTaskSendParams(request.params());
-
-                // 发送初始状态
-                TaskStatus initialStatus = new TaskStatus(
-                    TaskState.WORKING,
-                    null,  // 状态消息 (可选)
-                    Instant.now().toString()
-                );
-
-                TaskStatusUpdateEvent initialEvent = new TaskStatusUpdateEvent(
-                    params.id(),
-                    initialStatus,
-                    false,  // 非最终状态
-                    null
-                );
-
-                SendTaskStreamingResponse initialResponse = new SendTaskStreamingResponse(
-                    request.id(),
-                    "2.0",
-                    initialEvent,
-                    null
-                );
-
-                logger.info("发送初始状态事件");
-                emitter.send(SseEmitter.event()
-                    .name("task-update")
-                    .data(objectMapper.writeValueAsString(initialResponse)));
-
-                // 处理任务
-                JSONRPCResponse taskResponse = server.handleTaskSend(request);
-
-                if (taskResponse.error() != null) {
-                    sendErrorEvent(emitter, request.id(), ErrorCode.INTERNAL_ERROR, 
-                        taskResponse.error().message());
-                    return;
+            })
+            .subscribeOn(Schedulers.boundedElastic())
+            .doOnError(error -> logger.error("流式响应错误", error))
+            .onErrorResume(error -> {
+                // 发送错误响应
+                try {
+                    A2AError a2aError = new A2AError(
+                        ErrorCode.INTERNAL_ERROR,
+                        error.getMessage(),
+                        null
+                    );
+                    SendTaskStreamingResponse errorResponse = new SendTaskStreamingResponse(
+                        request.id(),
+                        "2.0",
+                        null,
+                        a2aError
+                    );
+                    return Flux.just(objectMapper.writeValueAsString(errorResponse));
+                } catch (Exception e) {
+                    return Flux.error(error);
                 }
-
-                // 发送最终状态
-                Task completedTask = (Task) taskResponse.result();
-                TaskStatusUpdateEvent finalEvent = new TaskStatusUpdateEvent(
-                    completedTask.id(),
-                    completedTask.status(),
-                    true,  // 最终状态
-                    null
-                );
-
-                SendTaskStreamingResponse finalResponse = new SendTaskStreamingResponse(
-                    request.id(),
-                    "2.0",
-                    finalEvent,
-                    null
-                );
-
-                logger.info("发送最终状态事件");
-                emitter.send(SseEmitter.event()
-                    .name("task-update")
-                    .data(objectMapper.writeValueAsString(finalResponse)));
-
-                emitter.complete();
-                logger.info("流式任务完成");
-
-            } catch (Exception e) {
-                logger.error("流式任务处理失败", e);
-                sendErrorEvent(emitter, request.id(), ErrorCode.INTERNAL_ERROR, e.getMessage());
-            }
-        });
-
-        return emitter;
+            });
+            
+        } catch (Exception e) {
+            logger.error("解析请求参数失败", e);
+            return Flux.error(e);
+        }
     }
 
     /**
@@ -218,31 +255,6 @@ public class A2AController {
      */
     private TaskSendParams parseTaskSendParams(Object params) throws Exception {
         return objectMapper.convertValue(params, TaskSendParams.class);
-    }
-
-    /**
-     * 发送错误事件
-     */
-    private void sendErrorEvent(SseEmitter emitter, Object requestId, ErrorCode code, String message) {
-        try {
-            A2AError error = new A2AError(code, message, null);
-            SendTaskStreamingResponse errorResponse = new SendTaskStreamingResponse(
-                requestId,
-                "2.0",
-                null,
-                error
-            );
-
-            emitter.send(SseEmitter.event()
-                .name("error")
-                .data(objectMapper.writeValueAsString(errorResponse)));
-
-            emitter.completeWithError(new RuntimeException(message));
-
-        } catch (IOException e) {
-            logger.error("发送错误事件失败", e);
-            emitter.completeWithError(e);
-        }
     }
 }
 

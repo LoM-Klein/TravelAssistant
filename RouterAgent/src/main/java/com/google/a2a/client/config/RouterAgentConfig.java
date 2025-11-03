@@ -1,11 +1,12 @@
 package com.google.a2a.client.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.a2a.client.component.aggregator.AggregatorAgent;
 import com.google.a2a.client.component.analyzer.IntentAnalyzer;
 import com.google.a2a.client.service.LLMService;
 import com.google.a2a.client.service.impl.SpringAILLMService;
-import com.google.a2a.client.service.impl.StreamingRouterServiceImpl;
 import com.google.a2a.client.manager.AgentManager;
+import com.google.a2a.client.manager.AgentRegistry;
 import com.google.a2a.client.component.orchestrator.AgentOrchestrator;
 import com.google.a2a.client.service.impl.RouterServiceImpl;
 import org.slf4j.Logger;
@@ -14,7 +15,6 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.reactive.function.client.WebClient;
 
 import java.io.IOException;
 
@@ -44,6 +44,16 @@ public class RouterAgentConfig {
                 manager.getAllAgents().size());
         
         return manager;
+    }
+    
+    /**
+     * AgentRegistry Bean
+     * 重要：必须从 AgentManager 中获取，确保使用同一个实例
+     */
+    @Bean
+    public AgentRegistry agentRegistry(AgentManager agentManager) {
+        logger.info("Exposing AgentRegistry from AgentManager");
+        return agentManager.getRegistry();
     }
     
     /**
@@ -95,33 +105,15 @@ public class RouterAgentConfig {
     }
     
     /**
-     * WebClient Builder Bean (for reactive streaming)
-     */
-    @Bean
-    public WebClient.Builder webClientBuilder() {
-        logger.info("Initializing WebClient Builder for streaming");
-        return WebClient.builder();
-    }
-    
-    /**
      * Aggregator Agent Bean
      */
     @Bean
-    public com.google.a2a.client.aggregator.AggregatorAgent aggregatorAgent(LLMService llmService) {
+    public AggregatorAgent aggregatorAgent(LLMService llmService) {
         logger.info("Initializing AggregatorAgent");
-        return new com.google.a2a.client.aggregator.AggregatorAgent(llmService);
+        return new AggregatorAgent(llmService);
     }
     
-    /**
-     * Streaming Router Service Bean
-     */
-    @Bean
-    public com.google.a2a.client.service.impl.StreamingRouterServiceImpl streamingRouterService(
-            IntentAnalyzer intentAnalyzer,
-            WebClient.Builder webClientBuilder,
-            com.google.a2a.client.aggregator.AggregatorAgent aggregatorAgent) {
-        logger.info("Initializing StreamingRouterService");
-        return new StreamingRouterServiceImpl(intentAnalyzer, webClientBuilder, aggregatorAgent);
-    }
+    // StreamingRouterServiceImpl 使用 @Service 注解，Spring 会自动扫描注册
+    // 不需要手动配置 Bean
 }
 

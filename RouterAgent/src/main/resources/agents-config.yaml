@@ -2,33 +2,9 @@
 # 定义所有可用的 Agent 及其配置信息
 
 agents:
-  # 翻译 Agent
-  - name: translator
-    url: http://localhost:8080
-    description: AI Translation Bot - Supports multiple language translation
-    skills:
-      - translation
-      - language
-      - multilingual
-    enabled: true
-    priority: 10
-    timeout: 30000
-    retryAttempts: 3
-    healthCheckInterval: 60
-    metadata:
-      provider: Google
-      version: "1.0.0"
-      supportedLanguages:
-        - en
-        - zh
-        - ja
-        - fr
-        - es
-        - de
-
   # 旅行推荐 Agent
   - name: travel-recommender
-    url: http://localhost:8081
+    url: http://localhost:9100
     description: Travel Recommendation Assistant - RAG-powered travel suggestions
     skills:
       - travel
@@ -49,63 +25,4 @@ agents:
         - multi-category-search
         - context-aware
         - conversation-memory
-
-  # 天气查询 Agent
-  - name: weather
-    url: http://localhost:8082
-    description: Weather Information Service
-    skills:
-      - weather
-      - forecast
-      - climate
-    enabled: true
-    priority: 5
-    timeout: 15000
-    retryAttempts: 5
-    healthCheckInterval: 30
-    metadata:
-      provider: WeatherAPI
-      version: "2.1.0"
-      coverage: worldwide
-
-  # 酒店预订 Agent
-  - name: hotel-booking
-    url: http://localhost:8083
-    description: Hotel Booking and Recommendation Service
-    skills:
-      - hotel
-      - booking
-      - accommodation
-      - travel
-    enabled: true
-    priority: 15
-    timeout: 45000
-    retryAttempts: 3
-    healthCheckInterval: 90
-    metadata:
-      provider: HotelBooking Inc
-      version: "3.2.1"
-      regions:
-        - Asia
-        - Europe
-        - Americas
-
-  # 航班查询 Agent (禁用示例)
-  - name: flight-search
-    url: http://localhost:8084
-    description: Flight Search and Booking Service
-    skills:
-      - flight
-      - airline
-      - booking
-      - travel
-    enabled: false  # 暂时禁用
-    priority: 12
-    timeout: 40000
-    retryAttempts: 3
-    healthCheckInterval: 60
-    metadata:
-      provider: FlightSearch Co
-      version: "2.0.0"
-      note: "Service under maintenance"
 

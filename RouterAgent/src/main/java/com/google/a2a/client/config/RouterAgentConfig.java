@@ -8,7 +8,6 @@ import com.google.a2a.client.service.impl.SpringAILLMService;
 import com.google.a2a.client.manager.AgentManager;
 import com.google.a2a.client.manager.AgentRegistry;
 import com.google.a2a.client.component.orchestrator.AgentOrchestrator;
-import com.google.a2a.client.service.impl.RouterServiceImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.model.ChatModel;

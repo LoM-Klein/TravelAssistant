@@ -3,6 +3,24 @@ spring:
     name: prompt-example
 
   ai:
+    alibaba:
+      a2a:
+        nacos:
+          server-addr: 127.0.0.1:8848
+          username: nacos
+          password: nacos
+          discovery:
+            enabled: true   # 启用服务发现（查询其他 Agent）
+          registry:
+            enabled: true   # 启用服务注册（注册本地 Agent）
+        server:
+          version: 1.0.0
+          card:
+            name: recommend_agent
+            description: 专门用于查找攻略的本地智能体
+            provider:
+              name: Spring AI Alibaba Documentation
+              organization: Spring AI Alibaba
     dashscope:
       api-key: sk-20a19e950b1f46eb968047ec8d3d171a
       # workspace-id: ${AI_DASHSCOPE_WORKSPACE_ID}

@@ -1,4 +1,4 @@
-package com.ai.recommend.config;
+package com.ai.recommend.config.agent;
 
 
 import org.springframework.ai.chat.prompt.PromptTemplate;

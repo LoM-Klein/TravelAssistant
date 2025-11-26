@@ -1,4 +1,4 @@
-package com.ai.recommend.componet.prosessor;
+package com.ai.recommend.rag.ETL.reader;
 
 
 import lombok.extern.slf4j.Slf4j;

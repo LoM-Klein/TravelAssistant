@@ -1,10 +1,9 @@
-package com.ai.recommend.config;
+package com.ai.recommend.config.agent;
 
 import com.ai.recommend.Service.RecommendAssistant;
 import com.ai.recommend.Service.Impl.A2ARecommendTaskHandler;
 import com.travelassistant.common.model.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.travelassistant.common.model.*;
 import com.ai.recommend.registry.A2AServer;
 import com.ai.recommend.Service.TaskHandler;
 import org.slf4j.Logger;

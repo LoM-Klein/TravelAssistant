@@ -20,15 +20,11 @@ public class SpecializedQuery {
     private String originalQuery;
     private TravelCategory category;
     private String specializedQuery;
-    private Map<String, Object> parameters;
     private LocalDateTime createdAt;
-    private int priority;
 
     // 默认构造函数
     public SpecializedQuery() {
-        this.parameters = new HashMap<>();
         this.createdAt = LocalDateTime.now();
-        this.priority = 1;
     }
 
     // 构造函数
@@ -41,17 +37,6 @@ public class SpecializedQuery {
     }
 
 
-    /**
-     * 添加参数
-     * @param key 键
-     * @param value 值
-     */
-    public void addParameter(String key, Object value) {
-        if (this.parameters == null) {
-            this.parameters = new HashMap<>();
-        }
-        this.parameters.put(key, value);
-    }
 
 
     /**
@@ -67,8 +52,6 @@ public class SpecializedQuery {
         return "SpecializedQuery{" +
                 "id='" + id + '\'' +
                 ", category=" + category +
-                ", specializedQuery='" + specializedQuery + '\'' +
-                ", priority=" + priority +
-                '}';
+                ", specializedQuery='" + specializedQuery +"}";
     }
 }

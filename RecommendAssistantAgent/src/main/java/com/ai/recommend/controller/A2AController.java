@@ -1,5 +1,6 @@
 package com.ai.recommend.controller;
 
+import com.alibaba.cloud.ai.graph.agent.a2a.A2aRemoteAgent;
 import com.travelassistant.common.model.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ai.recommend.registry.A2AServer;
@@ -51,7 +52,6 @@ public class A2AController {
     )
     public ResponseEntity<JSONRPCResponse> handleJsonRpcRequest(@RequestBody JSONRPCRequest request) {
         logger.info("收到 JSON-RPC 请求: method={}, id={}", request.method(), request.id());
-        
         // 验证 JSON-RPC 版本
         if (!"2.0".equals(request.jsonrpc())) {
             logger.warn("无效的 JSON-RPC 版本: {}", request.jsonrpc());

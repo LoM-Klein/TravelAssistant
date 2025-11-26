@@ -27,8 +27,9 @@ public interface LLMService {
      * 
      * @param userQuery 用户原始查询
      * @param agentOutput 从 Agent 收集的输出内容（可能包含多个 Agent 的响应）
+     * @param generatedPrefix 已经生成的输出前缀（用于利用 LLM 的 prefix-cache）
      * @return 聚合后的流式响应（Flux<String>）
      */
-    Flux<String> aggregateStreaming(String userQuery, String agentOutput);
+    Flux<String> aggregateStreaming(String userQuery, String agentOutput, String generatedPrefix);
 }
 

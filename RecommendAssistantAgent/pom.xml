@@ -36,6 +36,7 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <maven-deploy-plugin.version>3.1.1</maven-deploy-plugin.version>
+        <spring.ai.alibaba.version>1.1.0.0-M5</spring.ai.alibaba.version>
         <!-- utils -->
         <commons-lang3.version>3.14.0</commons-lang3.version>
     </properties>
@@ -63,13 +64,6 @@
             <groupId>com.travelassistant</groupId>
             <artifactId>common</artifactId>
         </dependency>
-        
-        <dependency>
-            <groupId>com.alibaba.cloud.ai</groupId>
-            <artifactId>spring-ai-alibaba-starter-dashscope</artifactId>
-            <version>1.0.0.4</version>
-        </dependency>
-
         <!-- https://mvnrepository.com/artifact/io.github.a2asdk/a2a-java-sdk-reference-grpc -->
         <dependency>
             <groupId>io.github.a2asdk</groupId>
@@ -108,6 +102,10 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-rag</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-advisors-vector-store</artifactId>
         </dependency>
         <dependency>
@@ -132,6 +130,35 @@
         <dependency>
             <groupId>org.springframework.data</groupId>
             <artifactId>spring-data-elasticsearch</artifactId>
+        </dependency>
+        <!-- 引入A2A Server starter -->
+        <dependency>
+            <groupId>com.alibaba.cloud.ai</groupId>
+            <artifactId>spring-ai-alibaba-starter-a2a-server</artifactId>
+            <version>1.0.0.4</version>
+        </dependency>
+        <!-- Spring AI Alibaba Agent Framework -->
+        <dependency>
+            <groupId>com.alibaba.cloud.ai</groupId>
+            <artifactId>spring-ai-alibaba-agent-framework</artifactId>
+            <version>${spring.ai.alibaba.version}</version>
+        </dependency>
+        <!-- 引入A2A Nacos 注册中心 -->
+        <dependency>
+            <groupId>com.alibaba.cloud.ai</groupId>
+            <artifactId>spring-ai-alibaba-starter-a2a-registry</artifactId>
+            <version>1.0.0.4</version>
+        </dependency>
+        <!-- 引入A2A 百炼大模型客户端，可以用其他的spring ai大模型客户端代替，如openai -->
+        <dependency>
+            <groupId>com.alibaba.cloud.ai</groupId>
+            <artifactId>spring-ai-alibaba-starter-dashscope</artifactId>
+            <version>${spring.ai.alibaba.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.alibaba.nacos</groupId>
+            <artifactId>nacos-client</artifactId>
+            <version>3.1.0</version>
         </dependency>
     </dependencies>
 

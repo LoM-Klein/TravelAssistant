@@ -8,9 +8,11 @@ import com.google.a2a.client.manager.AgentRegistry;
 import com.google.a2a.client.model.IntentAnalysisResult;
 import com.google.a2a.client.model.RoutedRequest;
 import com.google.a2a.client.service.StreamingRouterService;
+import com.google.a2a.client.strategy.AdaptiveMergeStrategy;
 import com.travelassistant.common.model.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
@@ -29,7 +31,7 @@ import java.util.stream.Collectors;
  * 2. Fan-out: 并行调用所有 Agent 的流式接口
  * 3. Fan-in: 使用 Flux.merge() 合并所有流
  * 4. 增量聚合: 使用 AggregatorAgent 进行 Token 重新生成
- * 
+ * <p>
  * 错误处理策略：
  * - 单个 Agent 失败不会影响其他 Agent 的执行
  * - 使用 onErrorResume 将失败的 Agent 替换为友好错误消息
@@ -40,13 +42,18 @@ public class StreamingRouterServiceImpl implements StreamingRouterService {
 
     private static final Logger logger = LoggerFactory.getLogger(StreamingRouterServiceImpl.class);
 
-    // 背压配置常量
-    private static final int AGENT_STREAM_BUFFER_SIZE = 1000;  // Agent 流缓冲区大小
-    private static final int MERGE_PREFETCH_SIZE = 256;  // 流合并预取大小
+    // 背压配置常量（🔥 已针对 RPM 15000 优化）
+    private static final int AGENT_STREAM_BUFFER_SIZE = 2000;  // 🔥 优化：从 1000 增加到 2000，防止快速 Agent 溢出
+    private static final int MERGE_PREFETCH_SIZE = 512;  // 🔥 优化：从 256 增加到 512，提升合并吞吐
 
     private final IntentAnalyzer intentAnalyzer;
     private final AggregatorAgent aggregatorAgent;
     private final AgentRegistry agentRegistry;
+    private final AdaptiveMergeStrategy adaptiveMergeStrategy;
+    
+    // 是否启用自适应合并策略
+    @Value("${router.adaptive-merge.enabled:false}")
+    private boolean adaptiveMergeEnabled;
     
     public StreamingRouterServiceImpl(
             IntentAnalyzer intentAnalyzer, 
@@ -55,6 +62,7 @@ public class StreamingRouterServiceImpl implements StreamingRouterService {
         this.intentAnalyzer = intentAnalyzer;
         this.aggregatorAgent = aggregatorAgent;
         this.agentRegistry = agentRegistry;
+        this.adaptiveMergeStrategy = new AdaptiveMergeStrategy();
     }
 
     /**
@@ -91,8 +99,10 @@ public class StreamingRouterServiceImpl implements StreamingRouterService {
                     request.query());
             
             // 步骤 3: 合并所有流
-            logger.info("[Step 3/3] Fan-in: Merging {} streams with backpressure control...", agentStreams.size());
-            Flux<String> mergedStream = mergeStreams(agentStreams);
+            logger.info("[Step 3/3] Fan-in: Merging {} streams with {} strategy...", 
+                    agentStreams.size(),
+                    adaptiveMergeEnabled ? "adaptive priority" : "standard");
+            Flux<String> mergedStream = mergeStreams(agentStreams, analysis.selectedAgents());
             
             // 步骤 4: 使用 AggregatorAgent 进行增量聚合
             logger.info("[Step 4] Incremental aggregation using AggregatorAgent...");
@@ -106,6 +116,8 @@ public class StreamingRouterServiceImpl implements StreamingRouterService {
 
     /**
      * 创建 Agent 流列表（带背压控制和错误处理）
+     * 
+     * 🔥 改进：为每个token添加Agent标签，解决乱序合并问题
      */
     private List<Flux<String>> createAgentStreams(
             List<String> agentNames, 
@@ -116,7 +128,14 @@ public class StreamingRouterServiceImpl implements StreamingRouterService {
                 .map(agentName -> {
                     String query = splitQueries.getOrDefault(agentName, defaultQuery);
                     Flux<String> stream = fetchAgentStreamWithQuery(agentName, query);
-                    return addBackpressureControl(stream, agentName);
+                    
+                    // 🔥 关键改进：为每个token添加Agent标签
+                    // 格式：[AgentName]token内容
+                    // 这样聚合器就能知道每段内容来自哪个Agent
+                    Flux<String> taggedStream = stream
+                            .map(token -> String.format("[%s]%s", agentName, token));
+                    
+                    return addBackpressureControl(taggedStream, agentName);
                 })
                 .collect(Collectors.toList());
     }
@@ -153,36 +172,112 @@ public class StreamingRouterServiceImpl implements StreamingRouterService {
     
     /**
      * 合并多个流
+     * <p>
+     * 🔥 支持两种合并策略：
+     * - 标准合并：使用 Flux.merge()，先到先处理
+     * - 自适应合并：根据缓冲区状态动态调整优先级
+     * 
+     * @param streams Agent 流列表
+     * @param agentNames Agent 名称列表
+     * @return 合并后的流
      */
-    private Flux<String> mergeStreams(List<Flux<String>> streams) {
+    private Flux<String> mergeStreams(List<Flux<String>> streams, List<String> agentNames) {
         if (streams.size() == 1) {
             return streams.get(0);
         }
         
-        @SuppressWarnings("unchecked")
-        Flux<String>[] streamsArray = streams.toArray(new Flux[0]);
-        return Flux.merge(MERGE_PREFETCH_SIZE, streamsArray);
+        // 根据配置选择合并策略
+        if (adaptiveMergeEnabled) {
+            logger.info("🔥 Using adaptive merge strategy with priority control");
+            return adaptiveMergeStrategy.mergeWithAdaptivePriority(streams, agentNames);
+        } else {
+            logger.info("Using standard merge strategy");
+            @SuppressWarnings("unchecked")
+            Flux<String>[] streamsArray = streams.toArray(new Flux[0]);
+            return Flux.merge(MERGE_PREFETCH_SIZE, streamsArray);
+        }
     }
     
     /**
      * 从单个 Agent 获取流（带专属查询）
+     * <p>
      * 使用 A2A 协议标准方式调用 Agent
+     * <p>
+     * 🔥 连接池支持：
+     * - 如果启用连接池，自动借用和归还客户端
+     * - 流完成时自动归还连接
+     * - 流出错时自动标记无效连接（如果是连接问题）
      */
     public Flux<String> fetchAgentStreamWithQuery(String agentName, String query) {
         return Flux.defer(() -> {
             logger.info("Fetching stream from agent '{}' with query: {}", agentName, query);
             
-            A2AClient client = agentRegistry.getClient(agentName)
-                    .orElseThrow(() -> new IllegalArgumentException("Agent not found: " + agentName));
+            // 🔥 优化：根据是否启用连接池选择不同的获取方式
+            A2AClient client;
+            boolean usePool = agentRegistry.isPoolEnabled();
+            
+            if (usePool) {
+                // 从连接池借用客户端
+                client = agentRegistry.borrowClient(agentName);
+                logger.debug("Borrowed client from pool for agent '{}'", agentName);
+            } else {
+                // 传统方式：直接获取客户端
+                client = agentRegistry.getClient(agentName)
+                        .orElseThrow(() -> new IllegalArgumentException("Agent not found: " + agentName));
+            }
             
             Sinks.Many<String> sink = Sinks.many().unicast().onBackpressureBuffer();
             TaskSendParams params = createTaskParams(query);
             
             client.sendTaskStreaming(params, createStreamingEventListener(agentName, sink));
             
-            return sink.asFlux();
+            Flux<String> resultFlux = sink.asFlux();
+            
+            // 🔥 关键：如果使用连接池，流完成时自动归还连接
+            if (usePool) {
+                resultFlux = resultFlux
+                        .doFinally(signalType -> {
+                            logger.debug("Stream from agent '{}' finished with signal: {}, returning client to pool", 
+                                    agentName, signalType);
+                            agentRegistry.returnClient(agentName, client);
+                        })
+                        .doOnError(error -> {
+                            // 判断是否是连接问题，如果是则标记连接无效
+                            if (isConnectionError(error)) {
+                                logger.error("Connection error detected for agent '{}', invalidating client", agentName);
+                                agentRegistry.invalidateClient(agentName, client);
+                            }
+                        });
+            }
+            
+            return resultFlux;
         })
         .subscribeOn(Schedulers.boundedElastic());
+    }
+    
+    /**
+     * 判断是否是连接错误
+     * 
+     * @param error 异常
+     * @return true 如果是连接相关的错误
+     */
+    private boolean isConnectionError(Throwable error) {
+        if (error == null) {
+            return false;
+        }
+        
+        String message = error.getMessage();
+        if (message == null) {
+            return false;
+        }
+        
+        // 检查常见的连接错误关键字
+        return message.toLowerCase().contains("connection") ||
+               message.toLowerCase().contains("timeout") ||
+               message.toLowerCase().contains("refused") ||
+               message.toLowerCase().contains("unreachable") ||
+               error instanceof java.net.ConnectException ||
+               error instanceof java.net.SocketTimeoutException;
     }
     
     /**
@@ -317,7 +412,7 @@ public class StreamingRouterServiceImpl implements StreamingRouterService {
             }
         }
         
-        return content.length() > 0 ? content.toString() : null;
+        return !content.isEmpty() ? content.toString() : null;
     }
 }
 

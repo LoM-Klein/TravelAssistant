@@ -1,4 +1,4 @@
-package com.ai.recommend.config;
+package com.ai.recommend.config.es;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch.cluster.HealthResponse;

@@ -23,6 +23,71 @@ spring:
 router:
   agents:
     config: agents-config.yaml  # Agent 配置文件路径
+  
+  # 自适应流合并策略
+  adaptive-merge:
+    # 是否启用自适应优先级调度
+    # true: 根据缓冲区状态动态调整流的处理优先级
+    # false: 使用标准的 Flux.merge()，先到先处理
+    enabled: false
+
+# A2AClient 连接池配置
+a2a:
+  pool:
+    # 是否启用连接池（默认 false，保持向后兼容）
+    enabled: false
+    
+    # 最大连接数：每个 Agent 的连接池最多可以创建的客户端数量
+    # 推荐值：10-20（根据并发需求调整）
+    max-total: 10
+    
+    # 最大空闲连接数：连接池中允许保留的最大空闲连接数
+    # 推荐值：maxTotal 的 50%
+    max-idle: 5
+    
+    # 最小空闲连接数：连接池中保持的最小空闲连接数（预热）
+    # 推荐值：2-3
+    min-idle: 2
+    
+    # 最大等待时间（毫秒）：当连接池已满时，borrowClient() 的最大等待时间
+    # 推荐值：5000-10000（5-10秒）
+    max-wait-millis: 5000
+    
+    # 借用时验证：从池中借用连接时是否验证连接有效性
+    # 推荐值：true（确保获取到可用连接）
+    test-on-borrow: true
+    
+    # 归还时验证：归还连接到池时是否验证连接有效性
+    # 推荐值：false（性能优化，归还时一般不需要验证）
+    test-on-return: false
+    
+    # 空闲时验证：定期验证空闲连接的有效性
+    # 推荐值：true（自动清理无效连接）
+    test-while-idle: true
+    
+    # 空闲连接检查间隔（毫秒）：多久检查一次空闲连接
+    # 推荐值：60000（1分钟）
+    time-between-eviction-runs-millis: 60000
+    
+    # 最小可清理空闲时间（毫秒）：连接空闲多久后可以被清理
+    # 推荐值：300000（5分钟）
+    min-evictable-idle-time-millis: 300000
+
+# LLM API 限流配置
+# 🔥 已针对 RPM 15000 优化
+llm:
+  rate-limiter:
+    # 时间窗口内允许的最大请求数
+    # 🔥 优化：10500/60s = 175 QPS，利用 70% 配额（留 30% 余量）
+    limit-for-period: 10500
+    
+    # 限流时间窗口（刷新周期）
+    # 60s 窗口 = 10500 RPM
+    limit-refresh-period: 60s
+    
+    # 获取许可的最大等待时间
+    # 🔥 优化：高吞吐场景增加到 10s
+    timeout-duration: 10s
 
 # 日志配置
 logging:
